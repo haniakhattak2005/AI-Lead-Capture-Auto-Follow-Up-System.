@@ -1,0 +1,260 @@
+{
+  "name": "Lead Capture & Auto Follow-Up",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Form responses 1"
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Google Sheets Trigger",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        -20,
+        0
+      ],
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "airtableTokenApi",
+        "operation": "create",
+        "base": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "table": {
+          "__rl": true,
+          "mode": "list",
+          "value": "Contacts"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $json.Name }}",
+            "Email": "={{ $json.Email }}",
+            "Company": "={{ $json.Company }}",
+            "Interest": "={{ $json['What are you interested in?'] }}",
+            "Status": "New"
+          }
+        },
+        "options": {}
+      },
+      "id": "2",
+      "name": "Airtable - Add Contact",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        200,
+        0
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "",
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=YOUR_GEMINI_API_KEY",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"Write a short, warm, personalized follow-up email (max 120 words) to a new lead named \" + $('Google Sheets Trigger').item.json.Name + \" from \" + $('Google Sheets Trigger').item.json.Company + \". They said they are interested in: '\" + $('Google Sheets Trigger').item.json['What are you interested in?'] + \"'. Sign it off as 'The Team'. Return ONLY the email body text, no subject line, no markdown.\"\n        }\n      ]\n    }\n  ]\n}) }}",
+        "options": {}
+      },
+      "id": "3",
+      "name": "Gemini - Generate Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        420,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "emailBody",
+              "type": "string",
+              "value": "={{ $json.candidates[0].content.parts[0].text }}"
+            },
+            {
+              "id": "a2",
+              "name": "leadName",
+              "type": "string",
+              "value": "={{ $('Google Sheets Trigger').item.json.Name }}"
+            },
+            {
+              "id": "a3",
+              "name": "leadEmail",
+              "type": "string",
+              "value": "={{ $('Google Sheets Trigger').item.json.Email }}"
+            },
+            {
+              "id": "a4",
+              "name": "leadCompany",
+              "type": "string",
+              "value": "={{ $('Google Sheets Trigger').item.json.Company }}"
+            },
+            {
+              "id": "a5",
+              "name": "leadInterest",
+              "type": "string",
+              "value": "={{ $('Google Sheets Trigger').item.json['What are you interested in?'] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4",
+      "name": "Parse Gemini Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.leadEmail }}",
+        "subject": "Thanks for reaching out, {{ $json.leadName }}!",
+        "emailType": "text",
+        "message": "={{ $json.emailBody }}",
+        "options": {}
+      },
+      "id": "5",
+      "name": "Gmail - Send to Lead",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        860,
+        -80
+      ],
+      "webhookId": "",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "your-email@gmail.com",
+        "subject": "New Lead: {{ $json.leadName }} ({{ $json.leadCompany }})",
+        "emailType": "text",
+        "message": "=New lead captured!\n\nName: {{ $json.leadName }}\nEmail: {{ $json.leadEmail }}\nCompany: {{ $json.leadCompany }}\nInterested in: {{ $json.leadInterest }}\n\nAuto follow-up email sent:\n{{ $json.emailBody }}",
+        "options": {}
+      },
+      "id": "6",
+      "name": "Gmail - Notify Me",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        860,
+        80
+      ],
+      "webhookId": "",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "Airtable - Add Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Airtable - Add Contact": {
+      "main": [
+        [
+          {
+            "node": "Gemini - Generate Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini - Generate Email": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini Response": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Send to Lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail - Notify Me",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": ""
+  }
+}
